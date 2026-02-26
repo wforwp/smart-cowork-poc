@@ -27,6 +27,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import { DataCollection } from './DataCollection';
 import { WorkRequest, WorkCalendar } from './TaskComponents';
 import { RequestManagement } from './RequestManagement';
+import { DocumentManagement } from './DocumentManagement';
 
 interface DashboardProps {
   user: { 
@@ -110,12 +111,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         </Paper>
       );
       case 'request_manage': return <RequestManagement />;
-      case 'doc_manage': return (
-        <Paper sx={{ p: 3, borderRadius: 4 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>📂 문서관리</Typography>
-          <Typography color="text.secondary">통합 문서 관리 서비스 준비 중입니다.</Typography>
-        </Paper>
-      );
+      case 'doc_manage': return <DocumentManagement currentUser={user} />;
       default: return null;
     }
   };

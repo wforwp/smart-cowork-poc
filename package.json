@@ -17,6 +17,7 @@
     "@supabase/supabase-js": "^2.97.0",
     "papaparse": "^5.5.3",
     "react": "^19.2.0",
+    "react-calendar": "^6.0.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1"
   },

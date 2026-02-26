@@ -22,7 +22,8 @@ import {
   DialogContent,
   DialogActions,
   Checkbox,
-  Grid
+  Grid,
+  Divider
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -31,7 +32,12 @@ import SearchIcon from '@mui/icons-material/Search';
 import DownloadIcon from '@mui/icons-material/Download';
 import CloseIcon from '@mui/icons-material/Close';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
 import Papa from 'papaparse';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+import './CalendarCustom.css';
 
 // Supabase Import
 import { supabase } from '../supabase';
@@ -75,6 +81,16 @@ interface Request {
   created_at: string;
 }
 
+// AI 분석 데이터 인터페이스
+interface AnalyzedTask {
+  id: string;
+  task_name: string;
+  start_date: string;
+  end_date: string;
+  related_system: string;
+  created_at: string;
+}
+
 interface WorkRequestProps {
   user: User;
 }
@@ -85,7 +101,6 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
   const [selectedTemplate, setSelectedTemplate] = useState<WorkTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   
-  // 폼 상태
   const [title, setTitle] = useState('');
   const [processorId, setProcessorId] = useState('');
   const [selectedEmployees, setSelectedEmployees] = useState<(User & { values: Record<string, string> })[]>([]);
@@ -101,17 +116,12 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
 
   const loadInitialData = async () => {
     try {
-      // 1. 사용자 목록 (CSV)
       Papa.parse('/users.csv', {
         download: true, header: true,
         complete: (results) => setUsers(results.data as User[])
       });
-
-      // 2. 템플릿 목록 (Supabase)
       const { data: tData } = await supabase.from('work_templates').select('*');
       if (tData) setTemplates(tData);
-
-      // 3. 신청 내역 목록 (Supabase)
       await loadRequests();
     } catch (e) {
       console.error(e);
@@ -135,14 +145,11 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
   const handleTemplateChange = (templateId: string) => {
     const template = templates.find(t => t.id === templateId) || null;
     setSelectedTemplate(template);
-    
-    // 템플릿에 설정된 기본 처리자가 있으면 자동 세팅
     if (template && template.default_processor_id) {
       setProcessorId(template.default_processor_id);
     } else {
       setProcessorId('');
     }
-    
     setSelectedEmployees(prev => prev.map(emp => ({ ...emp, values: {} })));
   };
 
@@ -151,7 +158,6 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
       setSnackbar({ open: true, message: '모든 필수 정보를 입력해주세요.', severity: 'error' });
       return;
     }
-
     const processor = users.find(u => u.employeeId === processorId);
     try {
       const { error } = await supabase.from('work_app_requests').insert([{
@@ -169,9 +175,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
         employees: selectedEmployees,
         status: 'pending'
       }]);
-
       if (error) throw error;
-
       setTitle('');
       setProcessorId('');
       setSelectedEmployees([]);
@@ -186,10 +190,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
 
   const handleApprove = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('work_app_requests')
-        .update({ status: 'approved' })
-        .eq('id', id);
+      const { error } = await supabase.from('work_app_requests').update({ status: 'approved' }).eq('id', id);
       if (error) throw error;
       setSnackbar({ open: true, message: '승인되었습니다.', severity: 'success' });
       loadRequests();
@@ -201,10 +202,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
   const handleDeleteRequest = async (id: string) => {
     if (!window.confirm('정말 이 신청 내역을 삭제하시겠습니까?')) return;
     try {
-      const { error } = await supabase
-        .from('work_app_requests')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from('work_app_requests').delete().eq('id', id);
       if (error) throw error;
       setSnackbar({ open: true, message: '삭제되었습니다.', severity: 'success' });
       loadRequests();
@@ -402,9 +400,138 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
   );
 };
 
-export const WorkCalendar = () => (
-  <Paper sx={{ p: 3, mt: 2, borderRadius: 4 }}>
-    <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>📅 업무 캘린더</Typography>
-    <Typography color="text.secondary">전체 업무 일정 및 개인별 일정을 캘린더 형태로 확인합니다.</Typography>
-  </Paper>
-);
+export const WorkCalendar = () => {
+  const [value, setValue] = useState<any>(new Date());
+  const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadTasks = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('ai_analyzed_tasks')
+        .select('*')
+        .order('start_date', { ascending: true });
+      if (error) throw error;
+      if (data) setTasks(data);
+    } catch (e) {
+      console.error('업무 로드 실패:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  // 선택된 날짜가 업무의 시작일과 종료일 사이에 있는지 확인
+  const filteredTasks = tasks.filter(task => {
+    if (!task.start_date || !task.end_date) return false;
+    const start = new Date(task.start_date);
+    const end = new Date(task.end_date);
+    const selected = value instanceof Date ? value : new Date();
+    
+    // 시간 정보 제거 후 날짜만 비교
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    selected.setHours(0, 0, 0, 0);
+
+    return selected >= start && selected <= end;
+  });
+
+  // 달력 타일 제어: 해당 날짜에 진행 중인 업무가 있는지 표시
+  const tileContent = ({ date, view }: any) => {
+    if (view === 'month') {
+      const hasTask = tasks.some(task => {
+        const start = new Date(task.start_date);
+        const end = new Date(task.end_date);
+        date.setHours(0, 0, 0, 0);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+        return date >= start && date <= end;
+      });
+      
+      if (hasTask) {
+        return <Box sx={{ width: 6, height: 6, bgcolor: 'secondary.main', borderRadius: '50%', margin: 'auto', mt: 0.5 }} />;
+      }
+    }
+    return null;
+  };
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <CalendarMonthIcon color="primary" />
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>AI 분석 업무 캘린더</Typography>
+        <Chip 
+          icon={<TipsAndUpdatesIcon sx={{ fontSize: '1rem !important' }} />} 
+          label="AI가 문서에서 추출한 업무 일정입니다" 
+          size="small" 
+          color="secondary" 
+          variant="outlined" 
+          sx={{ ml: 2 }}
+        />
+      </Stack>
+
+      <Grid container spacing={4}>
+        <Grid size={{ xs: 12, md: 5 }}>
+          <Paper sx={{ p: 2, borderRadius: 4, display: 'flex', justifyContent: 'center' }}>
+            <Calendar 
+              onChange={setValue} 
+              value={value} 
+              tileContent={tileContent}
+              formatDay={(_locale, date) => date.getDate().toString()}
+            />
+          </Paper>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 7 }}>
+          <Paper sx={{ p: 3, borderRadius: 4, height: '100%' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                {value instanceof Date ? value.toLocaleDateString() : ''} 진행 업무
+              </Typography>
+              <Button size="small" onClick={loadTasks} startIcon={<RefreshIcon fontSize="small" />}>새로고침</Button>
+            </Stack>
+            
+            <Divider sx={{ mb: 2 }} />
+
+            <TableContainer sx={{ maxHeight: 400 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>업무명</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>기간</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>관련시스템</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredTasks.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                        진행 중인 업무가 없습니다.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredTasks.map((task) => (
+                      <TableRow key={task.id} hover>
+                        <TableCell sx={{ fontWeight: 600 }}>{task.task_name}</TableCell>
+                        <TableCell sx={{ fontSize: '0.8rem' }}>
+                          {task.start_date} ~ {task.end_date}
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={task.related_system || '없음'} size="small" variant="filled" sx={{ bgcolor: 'grey.100', fontSize: '0.75rem' }} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+};
