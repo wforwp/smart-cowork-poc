@@ -54,6 +54,7 @@ interface WorkTemplate {
   id: string;
   title: string;
   items: TemplateItem[];
+  default_processor_id?: string;
 }
 
 interface Request {
@@ -134,6 +135,14 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
   const handleTemplateChange = (templateId: string) => {
     const template = templates.find(t => t.id === templateId) || null;
     setSelectedTemplate(template);
+    
+    // 템플릿에 설정된 기본 처리자가 있으면 자동 세팅
+    if (template && template.default_processor_id) {
+      setProcessorId(template.default_processor_id);
+    } else {
+      setProcessorId('');
+    }
+    
     setSelectedEmployees(prev => prev.map(emp => ({ ...emp, values: {} })));
   };
 
@@ -284,7 +293,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
             <TableContainer sx={{ maxHeight: 300 }}>
               <Table stickyHeader size="small">
                 <TableBody>
-                  {users.filter(u => (u.name || '').includes(searchKeyword)).map(u => (
+                  {users.filter(u => (u.name || '').toLowerCase().includes(searchKeyword.toLowerCase())).map(u => (
                     <TableRow 
                       key={u.employeeId} 
                       hover 

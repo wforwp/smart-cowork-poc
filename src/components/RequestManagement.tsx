@@ -29,9 +29,18 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import Papa from 'papaparse';
 
 // Supabase Import
 import { supabase } from '../supabase';
+
+interface User {
+  employeeId: string;
+  name: string;
+  department: string;
+  team: string;
+  position: string;
+}
 
 interface TemplateItem {
   id: string;
@@ -44,10 +53,12 @@ interface WorkTemplate {
   title: string;
   description: string;
   items: TemplateItem[];
+  default_processor_id: string;
   created_at: string;
 }
 
 export const RequestManagement: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
   const [templates, setTemplates] = useState<WorkTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -55,11 +66,20 @@ export const RequestManagement: React.FC = () => {
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [defaultProcessorId, setDefaultProcessorId] = useState('');
   const [items, setItems] = useState<TemplateItem[]>([]);
 
-  const loadTemplates = async () => {
+  const loadInitialData = async () => {
     setLoading(true);
     try {
+      // 사원 목록 로드
+      Papa.parse('/users.csv', {
+        download: true,
+        header: true,
+        complete: (results) => setUsers(results.data as User[])
+      });
+
+      // 템플릿 목록 로드
       const { data, error } = await supabase
         .from('work_templates')
         .select('*')
@@ -75,7 +95,7 @@ export const RequestManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    loadTemplates();
+    loadInitialData();
   }, []);
 
   const handleOpen = (template?: WorkTemplate) => {
@@ -83,11 +103,13 @@ export const RequestManagement: React.FC = () => {
       setEditId(template.id);
       setTitle(template.title);
       setDescription(template.description);
+      setDefaultProcessorId(template.default_processor_id || '');
       setItems(template.items);
     } else {
       setEditId(null);
       setTitle('');
       setDescription('');
+      setDefaultProcessorId('');
       setItems([{ id: Date.now().toString(), name: '', dataType: 'text' }]);
     }
     setIsOpen(true);
@@ -95,23 +117,31 @@ export const RequestManagement: React.FC = () => {
 
   const handleSave = async () => {
     if (!title) return alert('업무명을 입력해주세요.');
+    if (!defaultProcessorId) return alert('기본 처리자를 선택해주세요.');
     if (items.some(i => !i.name)) return alert('모든 항목의 이름을 입력해주세요.');
 
     try {
+      const payload = { 
+        title, 
+        description, 
+        default_processor_id: defaultProcessorId, 
+        items 
+      };
+
       if (editId) {
         const { error } = await supabase
           .from('work_templates')
-          .update({ title, description, items })
+          .update(payload)
           .eq('id', editId);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('work_templates')
-          .insert([{ title, description, items }]);
+          .insert([payload]);
         if (error) throw error;
       }
       setIsOpen(false);
-      loadTemplates();
+      loadInitialData();
     } catch (e: any) {
       alert('저장 실패: ' + e.message);
     }
@@ -122,7 +152,7 @@ export const RequestManagement: React.FC = () => {
       try {
         const { error } = await supabase.from('work_templates').delete().eq('id', id);
         if (error) throw error;
-        loadTemplates();
+        loadInitialData();
       } catch (e: any) {
         alert('삭제 실패: ' + e.message);
       }
@@ -136,7 +166,7 @@ export const RequestManagement: React.FC = () => {
           <ListAltIcon color="primary" /> 업무 형식 마스터 관리
         </Typography>
         <Stack direction="row" spacing={1}>
-          <IconButton onClick={loadTemplates} disabled={loading} size="small">
+          <IconButton onClick={loadInitialData} disabled={loading} size="small">
             <RefreshIcon fontSize="small" />
           </IconButton>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpen()} sx={{ borderRadius: 2 }}>
@@ -150,8 +180,8 @@ export const RequestManagement: React.FC = () => {
           <TableHead sx={{ bgcolor: 'grey.50' }}>
             <TableRow>
               <TableCell sx={{ fontWeight: 700 }}>업무명</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>기본 처리자</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>필요 항목</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>생성일</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700 }}>관리</TableCell>
             </TableRow>
           </TableHead>
@@ -161,26 +191,36 @@ export const RequestManagement: React.FC = () => {
             ) : templates.length === 0 ? (
               <TableRow><TableCell colSpan={4} align="center" sx={{ py: 8 }}>데이터가 없습니다.</TableCell></TableRow>
             ) : (
-              templates.map((t) => (
-                <TableRow key={t.id} hover>
-                  <TableCell>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t.title}</Typography>
-                    <Typography variant="caption" color="text.secondary">{t.description}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                      {t.items.map(item => <Chip key={item.id} label={item.name} size="small" variant="outlined" />)}
-                    </Box>
-                  </TableCell>
-                  <TableCell variant="body">{new Date(t.created_at).toLocaleString()}</TableCell>
-                  <TableCell align="right">
-                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                      <IconButton size="small" color="primary" onClick={() => handleOpen(t)}><EditIcon fontSize="small" /></IconButton>
-                      <IconButton size="small" color="error" onClick={() => handleDelete(t.id)}><DeleteIcon fontSize="small" /></IconButton>
-                    </Stack>
-                  </TableCell>
-                </TableRow>
-              ))
+              templates.map((t) => {
+                const processor = users.find(u => u.employeeId === t.default_processor_id);
+                return (
+                  <TableRow key={t.id} hover>
+                    <TableCell>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t.title}</Typography>
+                      <Typography variant="caption" color="text.secondary">{t.description}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      {processor ? (
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{processor.name} {processor.position}</Typography>
+                          <Typography variant="caption" color="text.secondary">{processor.team}</Typography>
+                        </Box>
+                      ) : t.default_processor_id}
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {t.items.map(item => <Chip key={item.id} label={item.name} size="small" variant="outlined" />)}
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <IconButton size="small" color="primary" onClick={() => handleOpen(t)}><EditIcon fontSize="small" /></IconButton>
+                        <IconButton size="small" color="error" onClick={() => handleDelete(t.id)}><DeleteIcon fontSize="small" /></IconButton>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -191,7 +231,28 @@ export const RequestManagement: React.FC = () => {
         <DialogContent dividers>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <TextField label="업무명" fullWidth required value={title} onChange={(e) => setTitle(e.target.value)} />
+            
+            <TextField
+              select
+              label="기본 처리자 설정"
+              fullWidth
+              required
+              value={defaultProcessorId}
+              onChange={(e) => setDefaultProcessorId(e.target.value)}
+              helperText="이 업무를 신청할 때 자동으로 지정될 처리자입니다."
+            >
+              {users.map((u) => (
+                <MenuItem key={u.employeeId} value={u.employeeId}>
+                  <Box>
+                    <Typography variant="body2">{u.name} {u.position}</Typography>
+                    <Typography variant="caption" color="text.secondary">{u.department} / {u.team}</Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </TextField>
+
             <TextField label="업무 설명" fullWidth multiline rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+            
             <Divider><Typography variant="body2" color="text.secondary">신청 항목 설정</Typography></Divider>
             {items.map((item, index) => (
               <Box key={item.id} sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
