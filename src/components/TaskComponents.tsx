@@ -414,8 +414,6 @@ export const WorkCalendar = () => {
       if (data) setTasks(data);
     } catch (e) {
       console.error('업무 로드 실패:', e);
-    } finally {
-      setLoading(false);
     }
   };
 
