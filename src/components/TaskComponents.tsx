@@ -26,7 +26,6 @@ import {
   Divider
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -406,10 +405,8 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
 export const WorkCalendar = () => {
   const [value, setValue] = useState<any>(new Date());
   const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const loadTasks = async () => {
-    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('ai_analyzed_tasks')
@@ -419,8 +416,6 @@ export const WorkCalendar = () => {
       if (data) setTasks(data);
     } catch (e) {
       console.error('업무 로드 실패:', e);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -440,27 +435,6 @@ export const WorkCalendar = () => {
       alert('상태 업데이트 실패: ' + e.message);
     }
   };
-
-  // 선택된 날짜가 업무의 시작일과 종료일 사이에 있는지 확인
-  const filteredTasks = tasks.filter(task => {
-    if (!task.end_date || !task.is_processed) return false;
-    
-    const end = new Date(task.end_date);
-    const selected = value instanceof Date ? value : new Date();
-    
-    end.setHours(0, 0, 0, 0);
-    selected.setHours(0, 0, 0, 0);
-
-    if (!task.start_date) {
-      // 시작일이 없는 경우 종료일 당일만 체크
-      return selected.getTime() === end.getTime();
-    } else {
-      // 시작일이 있는 경우 기간 체크
-      const start = new Date(task.start_date);
-      start.setHours(0, 0, 0, 0);
-      return selected >= start && selected <= end;
-    }
-  });
 
   const tileContent = ({ date, view }: any) => {
     if (view === 'month') {
