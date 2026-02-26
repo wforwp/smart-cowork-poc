@@ -326,7 +326,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
         <Typography variant="h6" sx={{ fontWeight: 700 }}>업무 신청 내역</Typography>
         <Stack direction="row" spacing={1}>
           <IconButton onClick={loadRequests} size="small"><RefreshIcon fontSize="small" /></IconButton>
-          <Button variant="contained" onClick={() => setIsCreating(true)}>신규 신청</Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsCreating(true)}>신규 신청</Button>
         </Stack>
       </Box>
       <Paper sx={{ borderRadius: 4, overflow: 'hidden' }}>
