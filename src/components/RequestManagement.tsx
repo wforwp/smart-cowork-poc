@@ -170,7 +170,7 @@ export const RequestManagement: React.FC = () => {
               templates.map((t) => (
                 <TableRow key={t.id} hover>
                   <TableCell sx={{ fontWeight: 600 }}>{t.title}</TableCell>
-                  <TableCell variant="body2" color="text.secondary">{t.description || '-'}</TableCell>
+                  <TableCell variant="body" color="text.secondary">{t.description || '-'}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                       {t.items.map(item => (
@@ -178,7 +178,7 @@ export const RequestManagement: React.FC = () => {
                       ))}
                     </Box>
                   </TableCell>
-                  <TableCell variant="body2">{t.createdAt}</TableCell>
+                  <TableCell variant="body">{t.createdAt}</TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <IconButton size="small" color="primary" onClick={() => handleOpen(t)}>

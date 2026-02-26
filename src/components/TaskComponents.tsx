@@ -17,19 +17,16 @@ import {
   Divider,
   Alert,
   Snackbar,
-  Stack,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Checkbox,
-  InputAdornment,
   Grid
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import SendIcon from '@mui/icons-material/Send';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
