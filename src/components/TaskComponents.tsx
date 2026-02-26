@@ -14,7 +14,6 @@ import {
   TableRow,
   IconButton,
   Chip,
-  Divider,
   Alert,
   Snackbar,
   Stack,
@@ -23,13 +22,10 @@ import {
   DialogContent,
   DialogActions,
   Checkbox,
-  Grid,
-  CircularProgress
+  Grid
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import SendIcon from '@mui/icons-material/Send';
-import ListAltIcon from '@mui/icons-material/ListAlt';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -87,7 +83,6 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
   const [templates, setTemplates] = useState<WorkTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<WorkTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [loading, setLoading] = useState(false);
   
   // 폼 상태
   const [title, setTitle] = useState('');
@@ -104,7 +99,6 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
   const [tempSelected, setTempSelected] = useState<string[]>([]);
 
   const loadInitialData = async () => {
-    setLoading(true);
     try {
       // 1. 사용자 목록 (CSV)
       Papa.parse('/users.csv', {
@@ -120,8 +114,6 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
       await loadRequests();
     } catch (e) {
       console.error(e);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -292,12 +284,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
             <TableContainer sx={{ maxHeight: 300 }}>
               <Table stickyHeader size="small">
                 <TableBody>
-                  {users.filter(u => {
-                    const name = u.name || '';
-                    const empId = u.employeeId || '';
-                    const keyword = searchKeyword.toLowerCase();
-                    return name.toLowerCase().includes(keyword) || empId.toLowerCase().includes(keyword);
-                  }).map(u => (
+                  {users.filter(u => (u.name || '').includes(searchKeyword)).map(u => (
                     <TableRow 
                       key={u.employeeId} 
                       hover 
@@ -339,7 +326,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
         <Typography variant="h6" sx={{ fontWeight: 700 }}>업무 신청 내역</Typography>
         <Stack direction="row" spacing={1}>
           <IconButton onClick={loadRequests} size="small"><RefreshIcon fontSize="small" /></IconButton>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsCreating(true)}>신규 신청</Button>
+          <Button variant="contained" onClick={() => setIsCreating(true)}>신규 신청</Button>
         </Stack>
       </Box>
       <Paper sx={{ borderRadius: 4, overflow: 'hidden' }}>

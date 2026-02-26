@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Supabase 프로젝트 설정에서 복사한 전체 URL을 입력해야 합니다.
-const supabaseUrl = 'https://ubnawkuwedatwbcuuyos.supabase.co';
-const supabaseAnonKey = 'sb_publishable_b7QwSoS0YVGxU6mpn5dDnw_icBn7VlJ';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Supabase 환경 변수가 설정되지 않았습니다. .env 파일을 확인하세요.');
+}
+
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
