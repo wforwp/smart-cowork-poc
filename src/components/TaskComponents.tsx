@@ -403,10 +403,8 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
 export const WorkCalendar = () => {
   const [value, setValue] = useState<any>(new Date());
   const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const loadTasks = async () => {
-    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('ai_analyzed_tasks')
