@@ -34,6 +34,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import Papa from 'papaparse';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -88,6 +90,7 @@ interface AnalyzedTask {
   start_date: string;
   end_date: string;
   related_system: string;
+  is_processed: boolean; // 적용 여부 추가
   created_at: string;
 }
 
@@ -333,7 +336,7 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
         <Typography variant="h6" sx={{ fontWeight: 700 }}>업무 신청 내역</Typography>
         <Stack direction="row" spacing={1}>
           <IconButton onClick={loadRequests} size="small"><RefreshIcon fontSize="small" /></IconButton>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsCreating(true)}>신규 신청</Button>
+          <Button variant="contained" onClick={() => setIsCreating(true)}>신규 신청</Button>
         </Stack>
       </Box>
       <Paper sx={{ borderRadius: 4, overflow: 'hidden' }}>
@@ -403,8 +406,10 @@ export const WorkRequest: React.FC<WorkRequestProps> = ({ user }) => {
 export const WorkCalendar = () => {
   const [value, setValue] = useState<any>(new Date());
   const [tasks, setTasks] = useState<AnalyzedTask[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const loadTasks = async () => {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('ai_analyzed_tasks')
@@ -414,6 +419,8 @@ export const WorkCalendar = () => {
       if (data) setTasks(data);
     } catch (e) {
       console.error('업무 로드 실패:', e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -421,14 +428,28 @@ export const WorkCalendar = () => {
     loadTasks();
   }, []);
 
-  // 선택된 날짜가 업무의 시작일과 종료일 사이에 있는지 확인
+  // 적용 상태 토글 함수
+  const handleToggleProcess = async (task: AnalyzedTask) => {
+    try {
+      const { error } = await supabase
+        .from('ai_analyzed_tasks')
+        .update({ is_processed: !task.is_processed })
+        .eq('id', task.id);
+      
+      if (error) throw error;
+      loadTasks(); // 목록 갱신
+    } catch (e: any) {
+      alert('상태 업데이트 실패: ' + e.message);
+    }
+  };
+
+  // 선택된 날짜가 적용된(is_processed: true) 업무의 시작일과 종료일 사이에 있는지 확인
   const filteredTasks = tasks.filter(task => {
-    if (!task.start_date || !task.end_date) return false;
+    if (!task.start_date || !task.end_date || !task.is_processed) return false;
     const start = new Date(task.start_date);
     const end = new Date(task.end_date);
     const selected = value instanceof Date ? value : new Date();
     
-    // 시간 정보 제거 후 날짜만 비교
     start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
     selected.setHours(0, 0, 0, 0);
@@ -436,10 +457,11 @@ export const WorkCalendar = () => {
     return selected >= start && selected <= end;
   });
 
-  // 달력 타일 제어: 해당 날짜에 진행 중인 업무가 있는지 표시
+  // 달력 타일 제어: 적용된 업무가 있는 날짜만 표시
   const tileContent = ({ date, view }: any) => {
     if (view === 'month') {
-      const hasTask = tasks.some(task => {
+      const hasProcessedTask = tasks.some(task => {
+        if (!task.is_processed) return false;
         const start = new Date(task.start_date);
         const end = new Date(task.end_date);
         date.setHours(0, 0, 0, 0);
@@ -448,7 +470,7 @@ export const WorkCalendar = () => {
         return date >= start && date <= end;
       });
       
-      if (hasTask) {
+      if (hasProcessedTask) {
         return <Box sx={{ width: 6, height: 6, bgcolor: 'secondary.main', borderRadius: '50%', margin: 'auto', mt: 0.5 }} />;
       }
     }
@@ -462,7 +484,7 @@ export const WorkCalendar = () => {
         <Typography variant="h6" sx={{ fontWeight: 700 }}>AI 분석 업무 캘린더</Typography>
         <Chip 
           icon={<TipsAndUpdatesIcon sx={{ fontSize: '1rem !important' }} />} 
-          label="AI가 문서에서 추출한 업무 일정입니다" 
+          label="AI가 분석한 항목을 적용하여 달력을 관리하세요" 
           size="small" 
           color="secondary" 
           variant="outlined" 
@@ -486,7 +508,7 @@ export const WorkCalendar = () => {
           <Paper sx={{ p: 3, borderRadius: 4, height: '100%' }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                {value instanceof Date ? value.toLocaleDateString() : ''} 진행 업무
+                {loading ? '로딩 중...' : 'AI 분석 업무 리스트'}
               </Typography>
               <Button size="small" onClick={loadTasks} startIcon={<RefreshIcon fontSize="small" />}>새로고침</Button>
             </Stack>
@@ -497,27 +519,35 @@ export const WorkCalendar = () => {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>업무명</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>업무명/시스템</TableCell>
                     <TableCell sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>기간</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>관련시스템</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>달력적용</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredTasks.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                        진행 중인 업무가 없습니다.
-                      </TableCell>
-                    </TableRow>
+                  {tasks.length === 0 ? (
+                    <TableRow><TableCell colSpan={3} align="center" sx={{ py: 4, color: 'text.secondary' }}>데이터가 없습니다.</TableCell></TableRow>
                   ) : (
-                    filteredTasks.map((task) => (
-                      <TableRow key={task.id} hover>
-                        <TableCell sx={{ fontWeight: 600 }}>{task.task_name}</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>
-                          {task.start_date} ~ {task.end_date}
-                        </TableCell>
+                    tasks.map((task) => (
+                      <TableRow key={task.id} hover sx={{ opacity: task.is_processed ? 1 : 0.6 }}>
                         <TableCell>
-                          <Chip label={task.related_system || '없음'} size="small" variant="filled" sx={{ bgcolor: 'grey.100', fontSize: '0.75rem' }} />
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{task.task_name}</Typography>
+                          <Typography variant="caption" color="text.secondary">{task.related_system}</Typography>
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>
+                          {task.start_date}<br/>~ {task.end_date}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button 
+                            variant={task.is_processed ? "contained" : "outlined"} 
+                            size="small" 
+                            color={task.is_processed ? "success" : "primary"}
+                            onClick={() => handleToggleProcess(task)}
+                            startIcon={task.is_processed ? <CheckCircleIcon /> : <AddCircleOutlineIcon />}
+                            sx={{ borderRadius: 2, minWidth: '80px', fontSize: '0.75rem' }}
+                          >
+                            {task.is_processed ? '적용됨' : '적용'}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -525,6 +555,15 @@ export const WorkCalendar = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+            
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.50', borderRadius: 2 }}>
+              <Typography variant="caption" color="info.main" sx={{ display: 'block' }}>
+                * <strong>[적용]</strong> 버튼을 누르면 해당 기간이 달력에 시각화됩니다.
+              </Typography>
+              <Typography variant="caption" color="info.main" sx={{ display: 'block' }}>
+                * 달력 아래 리스트는 선택한 날짜에 <strong>'적용된'</strong> 업무들입니다.
+              </Typography>
+            </Box>
           </Paper>
         </Grid>
       </Grid>

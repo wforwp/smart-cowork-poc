@@ -4,7 +4,7 @@ import {
   TableContainer, TableHead, TableRow, Dialog, DialogTitle, 
   DialogContent, DialogActions, TextField, MenuItem, Chip,
   IconButton, Divider, Stack, Alert, FormControl, InputLabel,
-  Select, OutlinedInput, Checkbox, ListItemText
+  Select, OutlinedInput, Checkbox, ListItemText, FormControlLabel
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -42,6 +42,7 @@ interface DataResponse {
   targetName: string;
   values: Record<string, string>;
   submittedAt: string; 
+  is_na: boolean; // 해당없음 여부
 }
 
 interface User {
@@ -60,7 +61,7 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailOpen] = useState(false);
   const [isInputModalOpen, setIsInputModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<DataRequest | null>(null);
 
@@ -71,7 +72,13 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
   const [newTitle, setNewTitle] = useState('');
   const [newTargetIds, setNewTargetIds] = useState<string[]>([]);
   const [newItems, setNewItems] = useState<RequestItem[]>([{ id: '1', name: '', dataType: 'text' }]);
+  
+  // 입력 필드 상태
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const [isNA, setIsNA] = useState(false); // 해당없음 체크 상태
+
+  // 필터 상태
+  const [excludeNA, setExcludeNA] = useState(false); // 해당없음 제외 필터
 
   const checkConnection = async () => {
     try {
@@ -138,38 +145,24 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
     }
   };
 
-  // 삭제 버튼 클릭 시 (모달 열기)
   const openDeleteConfirm = (e: React.MouseEvent, docId: string) => {
     e.stopPropagation();
     setItemToDelete(docId);
     setIsDeleteModalOpen(true);
   };
 
-  // 실제 삭제 실행
   const handleConfirmDelete = async () => {
     if (!itemToDelete) return;
-    
     try {
-      console.log("Starting deletion for:", itemToDelete);
       setIsDeleteModalOpen(false);
-      
-      // UI 즉시 반영
-      setRequests(prev => prev.filter(r => r.id !== itemToDelete));
-
-      // 1. 답변 삭제
       await supabase.from('responses').delete().eq('requestId', itemToDelete);
-      
-      // 2. 요청 본문 삭제
       const { error } = await supabase.from('requests').delete().eq('id', itemToDelete);
-      
       if (error) throw error;
-      
       alert("성공적으로 삭제되었습니다.");
       setItemToDelete(null);
-    } catch (e: any) {
-      console.error("Delete Error:", e);
-      alert(`삭제 실패: ${e.message}`);
       loadRequests();
+    } catch (e: any) {
+      alert(`삭제 실패: ${e.message}`);
     }
   };
 
@@ -181,22 +174,35 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
         requestId: selectedRequest.id,
         targetId: currentUser.employeeId,
         targetName: currentUser.name,
-        values: inputValues,
+        values: isNA ? {} : inputValues,
+        is_na: isNA,
         submittedAt: new Date().toISOString()
       }]);
       if (error) throw error;
       setInputValues({});
+      setIsNA(false);
       alert("제출되었습니다.");
+      loadResponses();
     } catch (e: any) {
       alert("제출 실패: " + e.message);
     }
   };
 
+  const getFilteredResponses = (requestId: string) => {
+    let res = responses.filter(r => r.requestId === requestId);
+    if (excludeNA) {
+      res = res.filter(r => !r.is_na);
+    }
+    return res;
+  };
+
   const downloadExcel = (request: DataRequest) => {
-    const relevantResponses = responses.filter(res => res.requestId === request.id);
-    const data = relevantResponses.map(res => {
-      const row: any = { '제출자': res.targetName, '제출시간': res.submittedAt };
-      request.items.forEach(item => { row[item.name] = res.values[item.id] || ''; });
+    const dataToExport = getFilteredResponses(request.id);
+    const data = dataToExport.map(res => {
+      const row: any = { '제출자': res.targetName, '제출시간': res.submittedAt, '상태': res.is_na ? '해당없음' : '제출' };
+      request.items.forEach(item => { 
+        row[item.name] = res.is_na ? '-' : (res.values[item.id] || ''); 
+      });
       return row;
     });
     const csv = Papa.unparse(data);
@@ -204,7 +210,7 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `${request.title}_결과.csv`);
+    link.setAttribute('download', `${request.title}_결과${excludeNA ? '_필터' : ''}.csv`);
     link.click();
   };
 
@@ -243,7 +249,7 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
               <TableRow 
                 key={req.id} 
                 hover 
-                onDoubleClick={() => { setSelectedRequest(req); setIsDetailModalOpen(true); }} 
+                onDoubleClick={() => { setSelectedRequest(req); setIsDetailOpen(true); }} 
                 style={{ cursor: 'pointer' }}
               >
                 <TableCell><Typography variant="body2" component="span">{req.requestNo}</Typography></TableCell>
@@ -252,13 +258,19 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
                 <TableCell>{req.items.length}개</TableCell>
                 <TableCell>
                   {req.targetIds.includes(currentUser.employeeId) ? (
-                    <Chip label={responses.some(r => r.requestId === req.id && r.targetId === currentUser.employeeId) ? '제출완료' : '미제출'} color={responses.some(r => r.requestId === req.id && r.targetId === currentUser.employeeId) ? 'success' : 'warning'} size="small" />
+                    responses.some(r => r.requestId === req.id && r.targetId === currentUser.employeeId) ? (
+                      <Chip 
+                        label={responses.find(r => r.requestId === req.id && r.targetId === currentUser.employeeId)?.is_na ? '해당없음' : '제출완료'} 
+                        color={responses.find(r => r.requestId === req.id && r.targetId === currentUser.employeeId)?.is_na ? 'default' : 'success'} 
+                        size="small" 
+                      />
+                    ) : <Chip label="미제출" color="warning" size="small" />
                   ) : <Chip label="요청함" size="small" variant="outlined" />}
                 </TableCell>
                 <TableCell align="right">
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
                     {req.targetIds.includes(currentUser.employeeId) && !responses.some(r => r.requestId === req.id && r.targetId === currentUser.employeeId) && (
-                      <Button variant="contained" size="small" onClick={(e) => { e.stopPropagation(); setSelectedRequest(req); setIsInputModalOpen(true); }}>입력</Button>
+                      <Button variant="contained" size="small" onClick={(e) => { e.stopPropagation(); setSelectedRequest(req); setIsInputModalOpen(true); setIsNA(false); setInputValues({}); }}>입력</Button>
                     )}
                     {req.requesterId === currentUser.employeeId && (
                       <IconButton size="small" color="error" onClick={(e) => openDeleteConfirm(e, req.id)}><DeleteIcon fontSize="small" /></IconButton>
@@ -281,7 +293,7 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
         </DialogActions>
       </Dialog>
 
-      {/* 이전 모달들은 동일 (상세 생략) */}
+      {/* 새 요청 모달 */}
       <Dialog open={isRequestModalOpen} onClose={() => setIsRequestModalOpen(false)} fullWidth maxWidth="md">
         <DialogTitle component="div" sx={{ fontWeight: 'bold' }}>새로운 자료취합 요청</DialogTitle>
         <DialogContent dividers>
@@ -306,10 +318,7 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
                 {users.filter(u => u.employeeId !== currentUser.employeeId).map((user) => (
                   <MenuItem key={user.employeeId} value={user.employeeId}>
                     <Checkbox checked={newTargetIds.indexOf(user.employeeId) > -1} />
-                    <ListItemText 
-                      primary={`${user.name} ${user.position}`} 
-                      secondary={`${user.department} / ${user.team}`}
-                    />
+                    <ListItemText primary={`${user.name} ${user.position}`} secondary={`${user.department} / ${user.team}`} />
                   </MenuItem>
                 ))}
               </Select>
@@ -322,15 +331,86 @@ export const DataCollection: React.FC<{ currentUser: { employeeId: string; name:
         <DialogActions><Button onClick={() => setIsRequestModalOpen(false)}>취소</Button><Button variant="contained" onClick={handleCreateRequest}>생성</Button></DialogActions>
       </Dialog>
 
+      {/* 데이터 입력 모달 */}
       <Dialog open={isInputModalOpen} onClose={() => setIsInputModalOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle component="div"><Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>{selectedRequest?.title}</Typography></DialogTitle>
-        <DialogContent dividers><Stack spacing={3} sx={{ mt: 1 }}>{selectedRequest?.items.map(item => (<TextField key={item.id} label={item.name} fullWidth type={item.dataType === 'number' ? 'number' : item.dataType === 'date' ? 'date' : 'text'} InputLabelProps={item.dataType === 'date' ? { shrink: true } : undefined} onChange={(e) => setInputValues({ ...inputValues, [item.id]: e.target.value })} />))}</Stack></DialogContent>
-        <DialogActions><Button onClick={() => setIsInputModalOpen(false)}>취소</Button><Button variant="contained" onClick={handleSubmitResponse}>제출</Button></DialogActions>
+        <DialogTitle component="div" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>{selectedRequest?.title}</Typography>
+          <FormControlLabel
+            control={<Checkbox checked={isNA} onChange={(e) => setIsNA(e.target.checked)} color="primary" />}
+            label="해당없음"
+          />
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={3} sx={{ mt: 1, opacity: isNA ? 0.5 : 1, pointerEvents: isNA ? 'none' : 'auto' }}>
+            {selectedRequest?.items.map(item => (
+              <TextField 
+                key={item.id} 
+                label={item.name} 
+                fullWidth 
+                required={!isNA}
+                disabled={isNA}
+                type={item.dataType === 'number' ? 'number' : item.dataType === 'date' ? 'date' : 'text'} 
+                InputLabelProps={item.dataType === 'date' ? { shrink: true } : undefined} 
+                value={inputValues[item.id] || ''}
+                onChange={(e) => setInputValues({ ...inputValues, [item.id]: e.target.value })} 
+              />
+            ))}
+          </Stack>
+          {isNA && <Typography variant="body2" color="primary" sx={{ mt: 2, fontWeight: 600 }}>* [해당없음] 체크 시 입력 없이 제출됩니다.</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsInputModalOpen(false)}>취소</Button>
+          <Button variant="contained" onClick={handleSubmitResponse}>제출</Button>
+        </DialogActions>
       </Dialog>
 
-      <Dialog open={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} fullWidth maxWidth="lg">
-        <DialogTitle component="div" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>[{selectedRequest?.requestNo}] {selectedRequest?.title}</Typography><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>{selectedRequest && <Button startIcon={<DownloadIcon />} variant="outlined" size="small" onClick={() => downloadExcel(selectedRequest)}>엑셀 다운로드</Button>}<IconButton onClick={() => setIsDetailModalOpen(false)} size="small"><CloseIcon /></IconButton></Box></DialogTitle>
-        <DialogContent dividers sx={{ p: 0 }}><TableContainer><Table stickyHeader size="small"><TableHead><TableRow><TableCell sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>제출자</TableCell>{selectedRequest?.items.map(item => <TableCell key={item.id} sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>{item.name}</TableCell>)}<TableCell sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>시간</TableCell><TableCell align="right" sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>작업</TableCell></TableRow></TableHead><TableBody>{selectedRequest && responses.filter(res => res.requestId === selectedRequest.id).map(res => (<TableRow key={res.id}><TableCell sx={{ fontWeight: 'medium' }}>{res.targetName}</TableCell>{selectedRequest.items.map(item => <TableCell key={item.id}>{res.values[item.id] || '-'}</TableCell>)}<TableCell variant="body">{res.submittedAt.slice(0, 16)}</TableCell><TableCell align="right">{(res.targetId === currentUser.employeeId || selectedRequest.requesterId === currentUser.employeeId) && <IconButton size="small" color="error" onClick={() => { supabase.from('responses').delete().eq('id', res.id); loadResponses(); }}><DeleteIcon fontSize="small" /></IconButton>}</TableCell></TableRow>))}</TableBody></Table></TableContainer></DialogContent>
+      {/* 상세 결과 모달 */}
+      <Dialog open={isDetailModalOpen} onClose={() => setIsDetailOpen(false)} fullWidth maxWidth="lg">
+        <DialogTitle component="div" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>[{selectedRequest?.requestNo}] {selectedRequest?.title}</Typography>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <FormControlLabel
+              control={<Checkbox size="small" checked={excludeNA} onChange={(e) => setExcludeNA(e.target.checked)} />}
+              label={<Typography variant="body2">해당없음 제외</Typography>}
+            />
+            {selectedRequest && <Button startIcon={<DownloadIcon />} variant="outlined" size="small" onClick={() => downloadExcel(selectedRequest)}>엑셀 다운로드</Button>}
+            <IconButton onClick={() => setIsDetailOpen(false)} size="small"><CloseIcon /></IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <TableContainer>
+            <Table stickyHeader size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>제출자</TableCell>
+                  <TableCell sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>상태</TableCell>
+                  {selectedRequest?.items.map(item => <TableCell key={item.id} sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>{item.name}</TableCell>)}
+                  <TableCell sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>시간</TableCell>
+                  <TableCell align="right" sx={{ bgcolor: '#eee', fontWeight: 'bold' }}>작업</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {selectedRequest && getFilteredResponses(selectedRequest.id).map(res => (
+                  <TableRow key={res.id}>
+                    <TableCell sx={{ fontWeight: 'medium' }}>{res.targetName}</TableCell>
+                    <TableCell>
+                      {res.is_na ? <Chip label="해당없음" size="small" variant="outlined" /> : <Chip label="제출" size="small" color="success" variant="outlined" />}
+                    </TableCell>
+                    {selectedRequest.items.map(item => (
+                      <TableCell key={item.id}>{res.is_na ? '-' : (res.values[item.id] || '-')}</TableCell>
+                    ))}
+                    <TableCell variant="body">{res.submittedAt.slice(0, 16)}</TableCell>
+                    <TableCell align="right">
+                      {(res.targetId === currentUser.employeeId || selectedRequest.requesterId === currentUser.employeeId) && (
+                        <IconButton size="small" color="error" onClick={() => { supabase.from('responses').delete().eq('id', res.id); loadResponses(); }}><DeleteIcon fontSize="small" /></IconButton>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
       </Dialog>
     </Box>
   );
