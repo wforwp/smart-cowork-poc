@@ -441,28 +441,46 @@ export const WorkCalendar = () => {
     }
   };
 
+  // 선택된 날짜가 업무의 시작일과 종료일 사이에 있는지 확인
   const filteredTasks = tasks.filter(task => {
-    if (!task.start_date || !task.end_date || !task.is_processed) return false;
-    const start = new Date(task.start_date);
+    if (!task.end_date || !task.is_processed) return false;
+    
     const end = new Date(task.end_date);
     const selected = value instanceof Date ? value : new Date();
-    start.setHours(0, 0, 0, 0);
+    
     end.setHours(0, 0, 0, 0);
     selected.setHours(0, 0, 0, 0);
-    return selected >= start && selected <= end;
+
+    if (!task.start_date) {
+      // 시작일이 없는 경우 종료일 당일만 체크
+      return selected.getTime() === end.getTime();
+    } else {
+      // 시작일이 있는 경우 기간 체크
+      const start = new Date(task.start_date);
+      start.setHours(0, 0, 0, 0);
+      return selected >= start && selected <= end;
+    }
   });
 
   const tileContent = ({ date, view }: any) => {
     if (view === 'month') {
       const dayTasks = tasks.filter(task => {
-        if (!task.is_processed) return false;
-        const start = new Date(task.start_date);
+        if (!task.is_processed || !task.end_date) return false;
+        
         const end = new Date(task.end_date);
         const current = new Date(date);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(0, 0, 0, 0);
         current.setHours(0, 0, 0, 0);
-        return current >= start && current <= end;
+        end.setHours(0, 0, 0, 0);
+
+        if (!task.start_date) {
+          // 시작일이 없는 경우 종료일 당일만 표시
+          return current.getTime() === end.getTime();
+        } else {
+          // 시작일이 있는 경우 기간 표시
+          const start = new Date(task.start_date);
+          start.setHours(0, 0, 0, 0);
+          return current >= start && current <= end;
+        }
       });
       
       if (dayTasks.length > 0) {
@@ -495,7 +513,6 @@ export const WorkCalendar = () => {
         />
       </Stack>
 
-      {/* 상단: 캘린더 영역 (전체 너비 활용) */}
       <Paper sx={{ p: 2, borderRadius: 4 }}>
         <Calendar 
           onChange={setValue} 
@@ -506,7 +523,6 @@ export const WorkCalendar = () => {
         />
       </Paper>
 
-      {/* 하단: 리스트 영역 */}
       <Paper sx={{ p: 3, borderRadius: 4 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -518,7 +534,6 @@ export const WorkCalendar = () => {
         <Divider sx={{ mb: 2 }} />
 
         <Grid container spacing={3}>
-          {/* 적용된 업무 리스트 */}
           <Grid size={12}>
             <TableContainer>
               <Table size="small">
@@ -534,12 +549,14 @@ export const WorkCalendar = () => {
                     <TableRow><TableCell colSpan={3} align="center" sx={{ py: 4 }}>데이터가 없습니다.</TableCell></TableRow>
                   ) : (
                     tasks.map((task) => (
-                      <TableRow key={task.id} hover>
+                      <TableRow key={task.id} hover sx={{ opacity: task.is_processed ? 1 : 0.6 }}>
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>{task.task_name}</Typography>
                           <Typography variant="caption" color="text.secondary">{task.related_system}</Typography>
                         </TableCell>
-                        <TableCell sx={{ fontSize: '0.75rem' }}>{task.start_date} ~ {task.end_date}</TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>
+                          {task.start_date ? `${task.start_date} ~ ` : ''}{task.end_date}
+                        </TableCell>
                         <TableCell align="right">
                           <Button 
                             variant={task.is_processed ? "contained" : "outlined"} 

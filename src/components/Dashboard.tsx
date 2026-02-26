@@ -24,6 +24,8 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 import FolderIcon from '@mui/icons-material/Folder';
+import SchoolIcon from '@mui/icons-material/School';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import { DataCollection } from './DataCollection';
 import { WorkRequest, WorkCalendar } from './TaskComponents';
 import { RequestManagement } from './RequestManagement';
@@ -40,7 +42,7 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
-type TaskType = 'collection' | 'request' | 'calendar' | 'agent' | 'request_manage' | 'doc_manage' | null;
+type TaskType = 'collection' | 'request' | 'calendar' | 'agent' | 'request_manage' | 'doc_manage' | 'edu_manage' | 'slot8' | 'slot9' | null;
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -97,6 +99,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       desc: '팀별/부서별 통합 문서함', 
       icon: <FolderIcon sx={{ fontSize: 40, color: '#be185d' }} /> 
     },
+    { 
+      id: 'edu_manage' as TaskType, 
+      title: '교육현황관리', 
+      desc: '임직원 필수 및 직무 교육 이수 관리', 
+      icon: <SchoolIcon sx={{ fontSize: 40, color: '#4d7c0f' }} /> 
+    },
+    { 
+      id: 'slot8' as TaskType, 
+      title: '', 
+      desc: '준비 중인 메뉴입니다.', 
+      icon: <AddCircleOutlineIcon sx={{ fontSize: 40, color: '#94a3b8' }} /> 
+    },
+    { 
+      id: 'slot9' as TaskType, 
+      title: '', 
+      desc: '준비 중인 메뉴입니다.', 
+      icon: <AddCircleOutlineIcon sx={{ fontSize: 40, color: '#94a3b8' }} /> 
+    },
   ];
 
   const renderTaskDetail = () => {
@@ -112,7 +132,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       );
       case 'request_manage': return <RequestManagement />;
       case 'doc_manage': return <DocumentManagement currentUser={user} />;
-      default: return null;
+      case 'edu_manage': return (
+        <Paper sx={{ p: 3, borderRadius: 4 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>🎓 교육현황관리</Typography>
+          <Typography color="text.secondary">교육 현황 관리 서비스 준비 중입니다.</Typography>
+        </Paper>
+      );
+      default: return (
+        <Paper sx={{ p: 3, borderRadius: 4 }}>
+          <Typography color="text.secondary">준비 중인 메뉴입니다.</Typography>
+        </Paper>
+      );
     }
   };
 
@@ -195,7 +225,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                       </Box>
                       <CardContent sx={{ textAlign: 'center', p: 0 }}>
                         <Typography gutterBottom variant="h6" component="div" sx={{ fontWeight: 700 }}>
-                          {task.title}
+                          {task.title || '(미지정)'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           {task.desc}
@@ -210,7 +240,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         ) : (
           <Box sx={{ animation: 'fadeIn 0.5s ease-out' }}>
             <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
-              {tasks.find(t => t.id === selectedTask)?.title}
+              {tasks.find(t => t.id === selectedTask)?.title || '상세 보기'}
             </Typography>
             {renderTaskDetail()}
           </Box>
